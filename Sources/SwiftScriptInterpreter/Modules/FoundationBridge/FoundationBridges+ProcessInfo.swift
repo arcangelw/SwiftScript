@@ -10,6 +10,12 @@ extension FoundationBridges {
     nonisolated(unsafe) static let processInfo: [String: Bridge] = {
         var d: [String: Bridge] = [
     "static let ProcessInfo.processInfo": .staticValue(boxOpaque(ProcessInfo.processInfo, typeName: "ProcessInfo")),
+    "var ProcessInfo.environment: [String: String]": .computed { _ in
+        return .dict(hostEnvironment().map { DictEntry(key: .string($0.key), value: .string($0.value)) })
+    },
+    "var ProcessInfo.arguments: [String]": .computed { _ in
+        return .array(hostProcessArguments().map { .string($0) })
+    },
     "var ProcessInfo.hostName: String": .computed { _ in
         return .string(hostNameOverride())
     },
@@ -18,8 +24,11 @@ extension FoundationBridges {
     },
         "set var ProcessInfo.processName: String": .setter { receiver, newValue in
             let recv: ProcessInfo = try unboxOpaque(receiver, as: ProcessInfo.self, typeName: "ProcessInfo")
-            recv.processName = try unboxString(newValue)
+            recv.processName = try unboxString(unwrapForSetter(newValue))
         },
+    "var ProcessInfo.processIdentifier: Int32": .computed { _ in
+        return .int(Int(hostProcessIdentifier()))
+    },
     "var ProcessInfo.globallyUniqueString: String": .computed { receiver in
         let recv: ProcessInfo = try unboxOpaque(receiver, as: ProcessInfo.self, typeName: "ProcessInfo")
         return .string(recv.globallyUniqueString)
@@ -35,6 +44,10 @@ extension FoundationBridges {
     "var ProcessInfo.activeProcessorCount: Int": .computed { receiver in
         let recv: ProcessInfo = try unboxOpaque(receiver, as: ProcessInfo.self, typeName: "ProcessInfo")
         return .int(recv.activeProcessorCount)
+    },
+    "var ProcessInfo.physicalMemory: UInt64": .computed { receiver in
+        let recv: ProcessInfo = try unboxOpaque(receiver, as: ProcessInfo.self, typeName: "ProcessInfo")
+        return try boxUnsignedAsInt(recv.physicalMemory)
     },
     "var ProcessInfo.systemUptime: Double": .computed { receiver in
         let recv: ProcessInfo = try unboxOpaque(receiver, as: ProcessInfo.self, typeName: "ProcessInfo")

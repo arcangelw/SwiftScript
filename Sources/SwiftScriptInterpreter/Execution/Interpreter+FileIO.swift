@@ -35,13 +35,14 @@ extension Interpreter {
         guard case .string(let path) = pathValue else {
             throw RuntimeError.invalid("String(contentsOfFile:): path must be String")
         }
+        let hostPath: String
         do {
-            try await authorizePath(path, for: .read)
+            hostPath = try await authorizePath(path, for: .read)
         } catch {
             throw UserThrowSignal(value: .opaque(typeName: "Error", value: error))
         }
         do {
-            let s = try String(contentsOfFile: path, encoding: .utf8)
+            let s = try String(contentsOfFile: hostPath, encoding: .utf8)
             return .string(s)
         } catch {
             throw UserThrowSignal(value: .string(error.localizedDescription))
@@ -50,23 +51,30 @@ extension Interpreter {
 
     /// Dispatch a method call on the `FileManager` singleton sentinel.
     /// Each method authorises its path arg(s) against the bound shell's
-    /// sandbox before touching disk.
-    func invokeFileManagerMethod(_ name: String, args: [Value]) async throws -> Value {
+    /// sandbox and then does its Foundation I/O on the *returned* host
+    /// path — under a path-mapped sandbox the script-visible virtual
+    /// spelling and the directory that backs it differ, and check and
+    /// I/O must agree on the host form.
+    func invokeFileManagerMethod(
+        _ name: String,
+        args: [Value],
+        labels: [String?]? = nil
+    ) async throws -> Value {
         switch name {
         case "fileExists":
             try expectStringArg(args, methodName: "FileManager.fileExists(atPath:)")
             if case .string(let path) = args[0] {
-                try await gatePath(path, for: .read,
+                let hostPath = try await gatePath(path, for: .read,
                                    methodName: "FileManager.fileExists(atPath:)")
-                return .bool(FileManager.default.fileExists(atPath: path))
+                return .bool(FileManager.default.fileExists(atPath: hostPath))
             }
         case "contentsOfDirectory":
             try expectStringArg(args, methodName: "FileManager.contentsOfDirectory(atPath:)")
             if case .string(let path) = args[0] {
-                try await gatePath(path, for: .read,
+                let hostPath = try await gatePath(path, for: .read,
                                    methodName: "FileManager.contentsOfDirectory(atPath:)")
                 do {
-                    let entries = try FileManager.default.contentsOfDirectory(atPath: path)
+                    let entries = try FileManager.default.contentsOfDirectory(atPath: hostPath)
                     return .array(entries.map { .string($0) })
                 } catch {
                     throw UserThrowSignal(value: .string(error.localizedDescription))
@@ -75,10 +83,10 @@ extension Interpreter {
         case "removeItem":
             try expectStringArg(args, methodName: "FileManager.removeItem(atPath:)")
             if case .string(let path) = args[0] {
-                try await gatePath(path, for: .delete,
+                let hostPath = try await gatePath(path, for: .delete,
                                    methodName: "FileManager.removeItem(atPath:)")
                 do {
-                    try FileManager.default.removeItem(atPath: path)
+                    try FileManager.default.removeItem(atPath: hostPath)
                     return .void
                 } catch {
                     throw UserThrowSignal(value: .string(error.localizedDescription))
@@ -95,11 +103,11 @@ extension Interpreter {
                     "FileManager.createDirectory(atPath:withIntermediateDirectories:): bad args"
                 )
             }
-            try await gatePath(path, for: .write,
+            let hostPath = try await gatePath(path, for: .write,
                                methodName: "FileManager.createDirectory(atPath:)")
             do {
                 try FileManager.default.createDirectory(
-                    atPath: path,
+                    atPath: hostPath,
                     withIntermediateDirectories: intermediate,
                     attributes: nil
                 )
@@ -107,7 +115,48 @@ extension Interpreter {
             } catch {
                 throw UserThrowSignal(value: .string(error.localizedDescription))
             }
+        case "changeCurrentDirectoryPath":
+            // Virtual `cd`: updates the bound shell's logical CWD (the
+            // one `resolve(_:)` anchors relative paths to and
+            // `currentDirectoryPath` reports) instead of chdir-ing the
+            // host process — a real chdir would escape the mapping and
+            // leak the embedder's host layout into later relative
+            // resolutions. Mirrors `FileManager`'s Bool contract:
+            // false when the target isn't an existing directory.
+            try expectStringArg(args, methodName: "FileManager.changeCurrentDirectoryPath(_:)")
+            if case .string(let path) = args[0] {
+                let hostPath = try await gatePath(path, for: .read,
+                                   methodName: "FileManager.changeCurrentDirectoryPath(_:)")
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: hostPath, isDirectory: &isDirectory),
+                      isDirectory.boolValue
+                else { return .bool(false) }
+                ShellKit.Shell.current.environment.workingDirectory =
+                    ShellKit.Shell.current.displayPath(for: hostPath)
+                return .bool(true)
+            }
         default: break
+        }
+        // Everything else falls through to the auto-generated
+        // FileManager bridges (copyItem, moveItem, contents,
+        // isReadableFile, …). They unbox an `.opaque` receiver, so
+        // hand them a real box — the sentinel is a `.structValue`
+        // used only for dispatch identity. The hardcoded cases above
+        // stay first because their semantics are virtualised (logical
+        // cwd, [String] listings) rather than raw Foundation.
+        // Label-keyed overload first, then the bare-key alias.
+        if let labels, !labels.isEmpty,
+           case .method(let body)? =
+            bridges[bridgeKey(forMethod: name, on: "FileManager", labels: labels)]
+        {
+            return try await body(
+                boxOpaque(FileManager.default, typeName: "FileManager"), args)
+        }
+        if case .method(let body)? =
+            bridges[bridgeKey(forMethod: name, on: "FileManager", labels: [])]
+        {
+            return try await body(
+                boxOpaque(FileManager.default, typeName: "FileManager"), args)
         }
         throw RuntimeError.invalid("'FileManager' has no method '\(name)'")
     }
@@ -145,10 +194,10 @@ extension Interpreter {
         }
         // The third arg (encoding:) is intentionally ignored — we always
         // use UTF-8.
-        try await gatePath(path, for: .write,
+        let hostPath = try await gatePath(path, for: .write,
                            methodName: "String.write(toFile:)")
         do {
-            try s.write(toFile: path, atomically: atomically, encoding: .utf8)
+            try s.write(toFile: hostPath, atomically: atomically, encoding: .utf8)
             return .void
         } catch {
             throw UserThrowSignal(value: .string(error.localizedDescription))
@@ -167,14 +216,15 @@ extension Interpreter {
     /// Shared sandbox-gate path used by every fast-path FileManager
     /// dispatch. Wraps the denial as a `UserThrowSignal` so the call
     /// site error path stays consistent with the auto-generated
-    /// bridges.
+    /// bridges. Returns the resolved host path — the caller's
+    /// Foundation call must consume it, never the original spelling.
     private func gatePath(
         _ path: String,
         for intent: PathAccessIntent,
         methodName: String
-    ) async throws {
+    ) async throws -> String {
         do {
-            try await authorizePath(path, for: intent)
+            return try await authorizePath(path, for: intent)
         } catch {
             throw UserThrowSignal(value: .opaque(typeName: "Error", value: error))
         }

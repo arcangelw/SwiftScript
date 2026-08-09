@@ -97,6 +97,10 @@ extension FoundationBridges {
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return .bool(recv.hasDirectoryPath)
     },
+    "var URL.pathComponents: [String]": .computed { receiver in
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return .array(recv.pathComponents.map { .string($0) })
+    },
     "var URL.lastPathComponent: String": .computed { receiver in
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return .string(recv.lastPathComponent)
@@ -119,9 +123,33 @@ extension FoundationBridges {
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return boxOpaque(recv.deletingPathExtension(), typeName: "URL")
     },
+    "mutating func URL.deleteLastPathComponent()": .mutatingMethod { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.deleteLastPathComponent: expected 0 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.deleteLastPathComponent()
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.deletePathExtension()": .mutatingMethod { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.deletePathExtension: expected 0 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.deletePathExtension()
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
     "var URL.standardized: URL": .computed { receiver in
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return boxOpaque(recv.standardized, typeName: "URL")
+    },
+    "mutating func URL.standardize()": .mutatingMethod { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.standardize: expected 0 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.standardize()
+        return (.void, boxOpaque(recv, typeName: "URL"))
     },
     "var URL.standardizedFileURL: URL": .computed { receiver in
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
@@ -134,6 +162,14 @@ extension FoundationBridges {
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return boxOpaque(recv.resolvingSymlinksInPath(), typeName: "URL")
     },
+    "mutating func URL.resolveSymlinksInPath()": .mutatingMethod { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.resolveSymlinksInPath: expected 0 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.resolveSymlinksInPath()
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
     "func URL.checkResourceIsReachable()": .method { receiver, args in
         guard args.count == 0 else {
             throw RuntimeError.invalid("URL.checkResourceIsReachable: expected 0 argument(s), got \(args.count)")
@@ -144,6 +180,14 @@ extension FoundationBridges {
         } catch {
             throw UserThrowSignal(value: .opaque(typeName: "Error", value: error))
         }
+    },
+    "mutating func URL.removeAllCachedResourceValues()": .mutatingMethod { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.removeAllCachedResourceValues: expected 0 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.removeAllCachedResourceValues()
+        return (.void, boxOpaque(recv, typeName: "URL"))
     },
     "static func URL.currentDirectory()": .staticMethod { args in
         guard args.count == 0 else {
@@ -177,6 +221,16 @@ extension FoundationBridges {
         return boxOpaque(URL(fileURLWithPath: try unboxString(args[0])), typeName: "URL")
     },
     "func URL.host()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.host: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        if let _v = recv.host() {
+            return .optional(.string(_v))
+        }
+        return .optional(nil)
+    },
+    "func URL.host(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.host: expected 1 argument(s), got \(args.count)")
         }
@@ -187,6 +241,16 @@ extension FoundationBridges {
         return .optional(nil)
     },
     "func URL.user()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.user: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        if let _v = recv.user() {
+            return .optional(.string(_v))
+        }
+        return .optional(nil)
+    },
+    "func URL.user(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.user: expected 1 argument(s), got \(args.count)")
         }
@@ -197,6 +261,16 @@ extension FoundationBridges {
         return .optional(nil)
     },
     "func URL.password()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.password: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        if let _v = recv.password() {
+            return .optional(.string(_v))
+        }
+        return .optional(nil)
+    },
+    "func URL.password(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.password: expected 1 argument(s), got \(args.count)")
         }
@@ -207,6 +281,13 @@ extension FoundationBridges {
         return .optional(nil)
     },
     "func URL.path()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.path: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return .string(recv.path())
+    },
+    "func URL.path(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.path: expected 1 argument(s), got \(args.count)")
         }
@@ -214,6 +295,16 @@ extension FoundationBridges {
         return .string(recv.path(percentEncoded: try unboxBool(args[0])))
     },
     "func URL.query()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.query: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        if let _v = recv.query() {
+            return .optional(.string(_v))
+        }
+        return .optional(nil)
+    },
+    "func URL.query(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.query: expected 1 argument(s), got \(args.count)")
         }
@@ -224,6 +315,16 @@ extension FoundationBridges {
         return .optional(nil)
     },
     "func URL.fragment()": .method { receiver, args in
+        guard args.count == 0 else {
+            throw RuntimeError.invalid("URL.fragment: expected 0 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        if let _v = recv.fragment() {
+            return .optional(.string(_v))
+        }
+        return .optional(nil)
+    },
+    "func URL.fragment(percentEncoded:)": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.fragment: expected 1 argument(s), got \(args.count)")
         }
@@ -233,12 +334,26 @@ extension FoundationBridges {
         }
         return .optional(nil)
     },
+    "func URL.appendingPathComponent(_:)": .method { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appendingPathComponent: expected 1 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return boxOpaque(recv.appendingPathComponent(try unboxString(args[0])), typeName: "URL")
+    },
     "func URL.appendingPathComponent()": .method { receiver, args in
         guard args.count == 1 else {
             throw RuntimeError.invalid("URL.appendingPathComponent: expected 1 argument(s), got \(args.count)")
         }
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return boxOpaque(recv.appendingPathComponent(try unboxString(args[0])), typeName: "URL")
+    },
+    "func URL.appendingPathExtension(_:)": .method { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appendingPathExtension: expected 1 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return boxOpaque(recv.appendingPathExtension(try unboxString(args[0])), typeName: "URL")
     },
     "func URL.appendingPathExtension()": .method { receiver, args in
         guard args.count == 1 else {
@@ -247,14 +362,83 @@ extension FoundationBridges {
         let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
         return boxOpaque(recv.appendingPathExtension(try unboxString(args[0])), typeName: "URL")
     },
-    "static func URL.homeDirectory()": .staticMethod { args in
+    "mutating func URL.appendPathComponent(_:)": .mutatingMethod { receiver, args in
         guard args.count == 1 else {
-            throw RuntimeError.invalid("URL.homeDirectory: expected 1 argument(s), got \(args.count)")
+            throw RuntimeError.invalid("URL.appendPathComponent: expected 1 argument(s), got \(args.count)")
         }
-        if let _v = URL.homeDirectory(forUser: try unboxString(args[0])) {
-            return .optional(boxOpaque(_v, typeName: "URL"))
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.appendPathComponent(try unboxString(args[0]))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.appendPathComponent()": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appendPathComponent: expected 1 argument(s), got \(args.count)")
         }
-        return .optional(nil)
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.appendPathComponent(try unboxString(args[0]))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.appendPathExtension(_:)": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appendPathExtension: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.appendPathExtension(try unboxString(args[0]))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.appendPathExtension()": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appendPathExtension: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.appendPathExtension(try unboxString(args[0]))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.removeCachedResourceValue(forKey:)": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.removeCachedResourceValue: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.removeCachedResourceValue(forKey: try unboxOpaque(args[0], as: URLResourceKey.self, typeName: "URLResourceKey"))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.removeCachedResourceValue()": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.removeCachedResourceValue: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.removeCachedResourceValue(forKey: try unboxOpaque(args[0], as: URLResourceKey.self, typeName: "URLResourceKey"))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "func URL.appending(queryItems:)": .method { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appending: expected 1 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return boxOpaque(recv.appending(queryItems: try unboxArray(args[0]).map { try unboxOpaque($0, as: URLQueryItem.self, typeName: "URLQueryItem") }), typeName: "URL")
+    },
+    "func URL.appending()": .method { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.appending: expected 1 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return boxOpaque(recv.appending(queryItems: try unboxArray(args[0]).map { try unboxOpaque($0, as: URLQueryItem.self, typeName: "URLQueryItem") }), typeName: "URL")
+    },
+    "mutating func URL.append(queryItems:)": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.append: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.append(queryItems: try unboxArray(args[0]).map { try unboxOpaque($0, as: URLQueryItem.self, typeName: "URLQueryItem") })
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "mutating func URL.append()": .mutatingMethod { receiver, args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("URL.append: expected 1 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.append(queryItems: try unboxArray(args[0]).map { try unboxOpaque($0, as: URLQueryItem.self, typeName: "URLQueryItem") })
+        return (.void, boxOpaque(recv, typeName: "URL"))
     },
     "init URL(fileReferenceLiteralResourceName:)": .`init` { args in
         guard args.count == 1 else {
@@ -262,11 +446,77 @@ extension FoundationBridges {
         }
         return boxOpaque(URL(fileReferenceLiteralResourceName: try unboxString(args[0])), typeName: "URL")
     },
+    "init URL(string:relativeTo:)": .`init` { args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("init URL(string:relativeTo:): expected 2 argument(s), got \(args.count)")
+        }
+        if let _v = URL(string: try unboxString(args[0]), relativeTo: try unboxOptionalValue(args[1]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }) {
+            return .optional(boxOpaque(_v, typeName: "URL"))
+        }
+        return .optional(nil)
+    },
+    "init URL(fileURLWithPath:relativeTo:)": .`init` { args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("init URL(fileURLWithPath:relativeTo:): expected 2 argument(s), got \(args.count)")
+        }
+        return boxOpaque(URL(fileURLWithPath: try unboxString(args[0]), relativeTo: try unboxOptionalValue(args[1]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }), typeName: "URL")
+    },
     "init URL(fileURLWithPath:isDirectory:)": .`init` { args in
         guard args.count == 2 else {
             throw RuntimeError.invalid("init URL(fileURLWithPath:isDirectory:): expected 2 argument(s), got \(args.count)")
         }
         return boxOpaque(URL(fileURLWithPath: try unboxString(args[0]), isDirectory: try unboxBool(args[1])), typeName: "URL")
+    },
+    "func URL.appendingPathComponent(_:isDirectory:)": .method { receiver, args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("URL.appendingPathComponent: expected 2 argument(s), got \(args.count)")
+        }
+        let recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        return boxOpaque(recv.appendingPathComponent(try unboxString(args[0]), isDirectory: try unboxBool(args[1])), typeName: "URL")
+    },
+    "mutating func URL.appendPathComponent(_:isDirectory:)": .mutatingMethod { receiver, args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("URL.appendPathComponent: expected 2 argument(s), got \(args.count)")
+        }
+        var recv: URL = try unboxOpaque(receiver, as: URL.self, typeName: "URL")
+        recv.appendPathComponent(try unboxString(args[0]), isDirectory: try unboxBool(args[1]))
+        return (.void, boxOpaque(recv, typeName: "URL"))
+    },
+    "init URL(fileURLWithPath:isDirectory:relativeTo:)": .`init` { args in
+        guard args.count == 3 else {
+            throw RuntimeError.invalid("init URL(fileURLWithPath:isDirectory:relativeTo:): expected 3 argument(s), got \(args.count)")
+        }
+        return boxOpaque(URL(fileURLWithPath: try unboxString(args[0]), isDirectory: try unboxBool(args[1]), relativeTo: try unboxOptionalValue(args[2]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }), typeName: "URL")
+    },
+    "init URL(dataRepresentation:relativeTo:)": .`init` { args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("init URL(dataRepresentation:relativeTo:): expected 2 argument(s), got \(args.count)")
+        }
+        if let _v = URL(dataRepresentation: try unboxOpaque(args[0], as: Data.self, typeName: "Data"), relativeTo: try unboxOptionalValue(args[1]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }) {
+            return .optional(boxOpaque(_v, typeName: "URL"))
+        }
+        return .optional(nil)
+    },
+    "init URL(dataRepresentation:relativeTo:isAbsolute:)": .`init` { args in
+        guard args.count == 3 else {
+            throw RuntimeError.invalid("init URL(dataRepresentation:relativeTo:isAbsolute:): expected 3 argument(s), got \(args.count)")
+        }
+        if let _v = URL(dataRepresentation: try unboxOpaque(args[0], as: Data.self, typeName: "Data"), relativeTo: try unboxOptionalValue(args[1]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }, isAbsolute: try unboxBool(args[2])) {
+            return .optional(boxOpaque(_v, typeName: "URL"))
+        }
+        return .optional(nil)
+    },
+    "init URL(filePath:)": .`init` { args in
+        guard args.count == 1 else {
+            throw RuntimeError.invalid("init URL(filePath:): expected 1 argument(s), got \(args.count)")
+        }
+        return boxOpaque(URL(filePath: try unboxString(args[0])), typeName: "URL")
+    },
+    "init URL(filePath:relativeTo:)": .`init` { args in
+        guard args.count == 2 else {
+            throw RuntimeError.invalid("init URL(filePath:relativeTo:): expected 2 argument(s), got \(args.count)")
+        }
+        return boxOpaque(URL(filePath: try unboxString(args[0]), relativeTo: try unboxOptionalValue(args[1]).map { try unboxOpaque($0, as: URL.self, typeName: "URL") }), typeName: "URL")
     },
         ]
         #if canImport(Darwin)
