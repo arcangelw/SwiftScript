@@ -75,7 +75,7 @@ extension Interpreter {
                         in: scope
                     ))
                 }
-                return try await body(args)
+                return try await callingBridge { try await body(args) }
             }
         }
         // Built-in type initializer registered via `registerInit` (URL,
@@ -345,13 +345,19 @@ extension Interpreter {
             // for a small allowlist of methods — full bidirectional inference
             // is bigger than what we need here.
             let implicitContext = implicitMemberContext(method: methodName, receiver: receiver)
+            // Only a bridged (opaque) receiver has a bridge that can
+            // interpret a deferred leading-dot member — the issue #11
+            // case (`app.descendants(matching: .any)`). For builtin
+            // containers a bare `.foo` stays a hard error.
+            let receiverIsBridged = { if case .opaque = receiver { return true }; return false }()
             var args: [Value] = []
             for arg in call.arguments {
                 args.append(try await evaluateArg(
                     arg.expression,
                     label: arg.label?.text,
                     contextType: implicitContext,
-                    in: scope
+                    in: scope,
+                    deferToCallee: receiverIsBridged
                 ))
             }
             if let trailing = call.trailingClosure {
@@ -755,19 +761,75 @@ extension Interpreter {
 
     /// Evaluate a call argument, resolving a bare implicit-member access
     /// (`.whitespaces`) against `contextType` when supplied.
+    ///
+    /// `deferToCallee` — set only for a call whose receiver is a bridged
+    /// (opaque) type — controls the issue #11 fallback: a leading-dot
+    /// member that resolves against no known context is handed to the
+    /// callee as an unresolved enum marker instead of erroring, so a
+    /// bridge (`app.descendants(matching: .any)`) can interpret the
+    /// case name. It stays *off* for builtin containers, so
+    /// `[1, 2, 3].contains(.foo)` remains the hard "no such member"
+    /// error stock Swift gives rather than silently comparing against a
+    /// marker that never matches.
     func evaluateArg(
         _ expr: ExprSyntax,
         label: String?,
         contextType: String?,
-        in scope: Scope
+        in scope: Scope,
+        deferToCallee: Bool = false
     ) async throws -> Value {
+        if let member = expr.as(MemberAccessExprSyntax.self), member.base == nil {
+            let caseName = member.declName.baseName.text
+            if let contextType,
+               let resolved = try await resolveContextualMember(
+                caseName, typeName: contextType, in: scope)
+            {
+                return resolved
+            }
+            if deferToCallee {
+                // A bridged parameter has no declared type for us to
+                // consult; hand the bare case name to the receiving
+                // bridge, which decides what it means (or raises its
+                // own clearer error).
+                return .enumValue(typeName: "", caseName: caseName, associatedValues: [])
+            }
+            // No context and no bridge to defer to — fall through so
+            // `evaluate(memberAccess:)` raises the "unsupported implicit
+            // member access" error.
+        }
         if let contextType {
-            // Resolves both a bare `.member` static-let and an
-            // OptionSet array literal (`[.sortedKeys, .prettyPrinted]`)
-            // against the context type — see `evaluate(_:expectingTypeName:in:)`.
+            // Resolves an OptionSet array literal
+            // (`[.sortedKeys, .prettyPrinted]`) and other contextual
+            // forms against the context type — see
+            // `evaluate(_:expectingTypeName:in:)`.
             return try await evaluate(expr, expectingTypeName: contextType, in: scope)
         }
         return try await evaluate(expr, in: scope)
+    }
+
+    /// Resolve a leading-dot case name against a known context type:
+    /// a bridge `static let` (`.utf8` → `String.Encoding.utf8`,
+    /// `.whitespaces` → `CharacterSet.whitespaces`) or a user enum
+    /// case. Returns `nil` when the name doesn't resolve, so the
+    /// caller can defer to the callee. Mirrors the static-let arm of
+    /// `evaluate(_:expectingTypeName:in:)` for the single-member case.
+    func resolveContextualMember(
+        _ caseName: String,
+        typeName: String,
+        in scope: Scope
+    ) async throws -> Value? {
+        switch bridges["static let \(typeName).\(caseName)"] {
+        case .staticValue(let v)?:
+            return v
+        case .staticComputed(let body)?:
+            return try await body()
+        default:
+            break
+        }
+        if enumDefs[typeName] != nil {
+            return enumCaseAccess(typeName: typeName, caseName: caseName)
+        }
+        return nil
     }
 
     /// Attempt a mutating method call on a stored variable (`Bool.toggle`,
@@ -809,7 +871,7 @@ extension Interpreter {
         let args = try await argSyntaxes.asyncMap {
             try await evaluate($0.expression, in: scope)
         }
-        let (result, updated) = try await body(receiver, args)
+        let (result, updated) = try await callingBridge { try await body(receiver, args) }
         // `writeLValuePath` writes in place through a class boundary
         // (so `let h` on a class still mutates its Data property) and
         // enforces `let` immutability for pure-value chains.
@@ -892,7 +954,7 @@ extension Interpreter {
             let args = try await argSyntaxes.asyncMap {
                 try await evaluate($0.expression, in: scope)
             }
-            let (result, updated) = try await body(value, args)
+            let (result, updated) = try await callingBridge { try await body(value, args) }
             try storage.write(updated)
             return result
 

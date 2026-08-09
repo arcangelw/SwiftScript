@@ -1,6 +1,46 @@
 import SwiftSyntax
 
 extension Interpreter {
+    /// Run a bridge closure, re-surfacing whatever it raises as a
+    /// value a script `do`/`catch` (and `try?`) can handle — issue #12.
+    ///
+    /// A `RuntimeError` or raw host `Error` thrown from a
+    /// `.method` / `.computed` / `.subscriptGet` / … body becomes a
+    /// ``UserThrowSignal`` carrying an opaque `Error`, so a bridge that
+    /// signals a recoverable failure (an element that isn't there, an
+    /// I/O error worth retrying) is catchable like any other thrown
+    /// value. A script throw (already a ``UserThrowSignal``) passes
+    /// through unchanged.
+    ///
+    /// The control-flow signals pass through untouched so a
+    /// `return` / `break` / `continue` / `exit` that unwinds through a
+    /// bridge which invoked a script closure keeps its meaning. And,
+    /// crucially, this only wraps errors that originate *inside a
+    /// bridge body*: the interpreter's own diagnostics — undefined
+    /// identifier, no-such-member, and the uncatchable
+    /// `fatalError` / `precondition` / division-by-zero traps — are
+    /// raised outside any bridge closure and so keep terminating the
+    /// script, exactly as stock Swift traps.
+    func callingBridge<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let signal as UserThrowSignal {
+            throw signal
+        } catch let control as ReturnSignal {
+            throw control
+        } catch let control as BreakSignal {
+            throw control
+        } catch let control as ContinueSignal {
+            throw control
+        } catch let control as FallthroughSignal {
+            throw control
+        } catch let exit as ScriptExit {
+            throw exit
+        } catch {
+            throw UserThrowSignal(value: .opaque(typeName: "Error", value: error))
+        }
+    }
+
     /// `throw expr` — evaluate the expression and raise it as a user error.
     func execute(throw throwStmt: ThrowStmtSyntax, in scope: Scope) async throws -> Value {
         let value = try await evaluate(throwStmt.expression, in: scope)
