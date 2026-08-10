@@ -26,6 +26,7 @@ extension Interpreter {
 
         for member in enumDecl.memberBlock.members {
             let decl = member.decl
+            try rejectMacroMember(decl)
             if let caseDecl = decl.as(EnumCaseDeclSyntax.self) {
                 for element in caseDecl.elements {
                     let caseName = element.name.text
@@ -129,6 +130,14 @@ extension Interpreter {
             rawType: rawType,
             methods: methods,
             staticMembers: staticMembers
+        )
+        // `@Suite enum Fixtures { … }` — record host-registered
+        // attributes, same as the struct / class paths.
+        try await recordAttributedDeclarations(
+            enumDecl.attributes,
+            declarationName: name,
+            invocable: nil,
+            in: scope
         )
         return .void
     }

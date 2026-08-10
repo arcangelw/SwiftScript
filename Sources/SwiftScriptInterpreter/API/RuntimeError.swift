@@ -11,6 +11,7 @@ public enum RuntimeError: Error, CustomStringConvertible {
     /// spelling via the `invalid(_:)` factory below.
     case invalid(String, at: Int?)
     case unknownIdentifier(String, at: Int)
+    case noMacro(String, at: Int)
     case divisionByZero(at: Int?)
 
     /// Source-compatible constructor for the position-less spelling —
@@ -29,6 +30,8 @@ public enum RuntimeError: Error, CustomStringConvertible {
             return s
         case .unknownIdentifier(let n, _):
             return "cannot find '\(n)' in scope"
+        case .noMacro(let n, _):
+            return "no macro named '\(n)'"
         case .divisionByZero:
             return "division by zero"
         }
@@ -40,6 +43,7 @@ public enum RuntimeError: Error, CustomStringConvertible {
         switch self {
         case .unsupported(_, let at):       return at
         case .unknownIdentifier(_, let at): return at
+        case .noMacro(_, let at):           return at
         case .invalid(_, let at):           return at
         case .divisionByZero(let at):       return at
         }
@@ -55,7 +59,7 @@ public enum RuntimeError: Error, CustomStringConvertible {
             return .invalid(message, at: offset)
         case .divisionByZero:
             return .divisionByZero(at: offset)
-        case .unsupported, .unknownIdentifier:
+        case .unsupported, .unknownIdentifier, .noMacro:
             return self
         }
     }
