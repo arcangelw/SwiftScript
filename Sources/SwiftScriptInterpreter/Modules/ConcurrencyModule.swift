@@ -18,9 +18,12 @@ struct ConcurrencyModule: BuiltinModule {
         // returns a `.void` placeholder. Real Swift returns a Task<…>
         // handle you can `.value` on, but the tour only fires-and-
         // forgets so we leave that surface unimplemented.
-        i.registerBuiltin(name: "Task") { args in
+        i.registerBuiltin(name: "Task") { [weak i] args in
             guard args.count == 1, case .function(let fn) = args[0] else {
                 throw RuntimeError.invalid("Task: expected a closure")
+            }
+            guard let i else {
+                throw RuntimeError.invalid("Task: interpreter unavailable")
             }
             _ = try await i.invoke(fn, args: [])
             return .void
