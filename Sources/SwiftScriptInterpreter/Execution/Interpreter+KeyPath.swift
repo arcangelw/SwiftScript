@@ -68,6 +68,10 @@ extension Interpreter {
     }
 
     private func readKeyPathStep(_ name: String, on receiver: Value) async throws -> Value {
+        // SwiftBox patch: `\.self` / `$0.self` must return the receiver
+        // itself. Without this, scalars fall through to lookupProperty,
+        // which has no "self" member and errors out.
+        if name == "self" { return receiver }
         switch receiver {
         case .structValue(let typeName, let fields):
             if let f = fields.first(where: { $0.name == name }) {
