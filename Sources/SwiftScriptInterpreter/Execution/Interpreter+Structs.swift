@@ -317,7 +317,21 @@ extension Interpreter {
                 fields.append(StructField(name: prop.name, value: value))
             } else {
                 // Trailing default.
-                let value = try await evaluate(prop.defaultValue!, in: scope)
+                var value = try await evaluate(prop.defaultValue!, in: scope)
+                // Optional-typed property: wrap the default via the same
+                // coercion the explicit-argument path applies, so
+                // `var x: String? = "hi"` seeds `.optional("hi")` and
+                // `if let` / `??` see a real Optional. Minimal surface:
+                // only OptionalTypeSyntax triggers (non-Optional defaults
+                // keep the previous lenient behavior).
+                if let propType = prop.type, propType.is(OptionalTypeSyntax.self) {
+                    value = try await coerce(
+                        value: value,
+                        expr: prop.defaultValue!,
+                        toType: propType,
+                        in: .argument
+                    )
+                }
                 fields.append(StructField(name: prop.name, value: value))
             }
         }
