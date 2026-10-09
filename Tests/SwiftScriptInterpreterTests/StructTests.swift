@@ -142,4 +142,38 @@ struct StructTests {
             """)
         #expect(r == .double(5.0))
     }
+
+    /// S3（fork）：struct 方法体内裸调另一方法（implicit-self dispatch）。
+    /// 原缺口：Interpreter+Calls.swift 裸调用 implicit-self 段仅查
+    /// classInstance，structValue 落穿顶层函数查找报 cannot find。
+    @Test func bareCallToSiblingStructMethodInsideMethod() async throws {
+        let interp = Interpreter()
+        let r = try await interp.eval("""
+            struct Counter {
+                var base: Int = 10
+                func double() -> Int { base * 2 }
+                func quadruple() -> Int { double() * 2 }
+            }
+            Counter().quadruple()
+            """)
+        #expect(r == .int(40))
+    }
+
+    /// S3（fork）：方法体内裸调方法 + 隐式 self 读 + return（SwiftBox
+    /// body 形态的内核等价物——@State 经全局函数桥改写后同此形态）。
+    @Test func bareCallChainWithImplicitSelfAndReturn() async throws {
+        let interp = Interpreter()
+        let r = try await interp.eval("""
+            struct Greeter {
+                var who: String = "swift"
+                func greet() -> String { return "hi " + who }
+                func shout() -> String {
+                    let g = greet()
+                    g + "!"
+                }
+            }
+            Greeter().shout()
+            """)
+        #expect(r == .string("hi swift!"))
+    }
 }

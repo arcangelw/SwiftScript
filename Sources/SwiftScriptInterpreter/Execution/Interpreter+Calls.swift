@@ -424,6 +424,45 @@ extension Interpreter {
             return try await invokeClassMethod(method, on: inst, def: owningDef, args: args)
         }
 
+        // S3（fork）：struct 方法体内裸调兄弟方法——与上方 classInstance
+        // 分支平行的 structValue implicit-self 分派。self 绑定来自
+        // invokeStructMethod 的 callScope（Interpreter+Structs.swift:431）。
+        // 裸调 mutating 方法不在此分派（SwiftBox @State 写走宿主全局
+        // 函数桥；显式 receiver 路径已含完整 mutating 支持）——落穿
+        // 顶层函数查找，以其报错收场。
+        if let ref = call.calledExpression.as(DeclReferenceExprSyntax.self),
+           let selfBinding = scope.lookup("self"),
+           case .structValue(let structTypeName, let selfFields) = selfBinding.value,
+           let def = structDefs[structTypeName],
+           let method = def.methods[ref.baseName.text]
+        {
+            let argSyntaxes = Array(call.arguments)
+            var args: [Value] = []
+            args.reserveCapacity(argSyntaxes.count + (call.trailingClosure != nil ? 1 : 0))
+            for (i, argSyntax) in argSyntaxes.enumerated() {
+                var value = try await evaluate(argSyntax.expression, in: scope)
+                if i < method.parameters.count, let paramType = method.parameters[i].type {
+                    value = try await coerce(
+                        value: value,
+                        expr: argSyntax.expression,
+                        toType: paramType,
+                        in: .argument
+                    )
+                }
+                args.append(value)
+            }
+            if let trailing = call.trailingClosure {
+                args.append(try await evaluate(closure: trailing, in: scope))
+                for extra in call.additionalTrailingClosures {
+                    args.append(try await evaluate(closure: extra.closure, in: scope))
+                }
+            }
+            let (result, _) = try await invokeStructMethod(
+                method, on: selfBinding.value, fields: selfFields, args: args
+            )
+            return result
+        }
+
         let calleeValue = try await evaluate(call.calledExpression, in: scope)
         guard case .function(let fn) = calleeValue else {
             throw RuntimeError.invalid(
