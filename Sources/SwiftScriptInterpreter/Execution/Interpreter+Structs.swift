@@ -321,10 +321,15 @@ extension Interpreter {
                 // Optional-typed property: wrap the default via the same
                 // coercion the explicit-argument path applies, so
                 // `var x: String? = "hi"` seeds `.optional("hi")` and
-                // `if let` / `??` see a real Optional. Minimal surface:
-                // only OptionalTypeSyntax triggers (non-Optional defaults
-                // keep the previous lenient behavior).
-                if let propType = prop.type, propType.is(OptionalTypeSyntax.self) {
+                // `if let` / `??` see a real Optional. The Optional check
+                // resolves typealiases first (matching `coerce`, which
+                // `resolveType`s its target), so a `typealias S = String?`
+                // property type triggers the same coercion as a literal
+                // `String?`. Non-Optional defaults keep the previous
+                // lenient behavior.
+                if let propType = prop.type,
+                   resolveType(propType).is(OptionalTypeSyntax.self)
+                {
                     value = try await coerce(
                         value: value,
                         expr: prop.defaultValue!,
