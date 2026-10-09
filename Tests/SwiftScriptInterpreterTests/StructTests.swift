@@ -176,4 +176,26 @@ struct StructTests {
             """)
         #expect(r == .string("hi swift!"))
     }
+
+    /// S3 fix（fork）：非 mutating 方法体内裸调 mutating 方法——显式报错
+    /// 而非静默丢写（self 值拷贝的 finalSelf 无回写路径）。
+    @Test func bareCallToMutatingMethodInsideMethodThrows() async throws {
+        let interp = Interpreter()
+        do {
+            _ = try await interp.eval("""
+                struct Counter {
+                    var n: Int = 0
+                    mutating func bump() { n += 1 }
+                    func run() -> Int {
+                        bump()
+                        return n
+                    }
+                }
+                Counter().run()
+                """)
+            Issue.record("expected mutating-member error")
+        } catch {
+            #expect("\(error)".contains("cannot use mutating member"))
+        }
+    }
 }

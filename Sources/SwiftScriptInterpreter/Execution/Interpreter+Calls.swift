@@ -427,15 +427,19 @@ extension Interpreter {
         // S3（fork）：struct 方法体内裸调兄弟方法——与上方 classInstance
         // 分支平行的 structValue implicit-self 分派。self 绑定来自
         // invokeStructMethod 的 callScope（Interpreter+Structs.swift:431）。
-        // 裸调 mutating 方法不在此分派（SwiftBox @State 写走宿主全局
-        // 函数桥；显式 receiver 路径已含完整 mutating 支持）——落穿
-        // 顶层函数查找，以其报错收场。
+        // 裸调 mutating 方法显式报错（self 值拷贝不可回写；显式 receiver
+        // 路径支持完整 mutating lvalue 回写）。
         if let ref = call.calledExpression.as(DeclReferenceExprSyntax.self),
            let selfBinding = scope.lookup("self"),
            case .structValue(let structTypeName, let selfFields) = selfBinding.value,
            let def = structDefs[structTypeName],
            let method = def.methods[ref.baseName.text]
         {
+            if method.isMutating {
+                throw RuntimeError.invalid(
+                    "cannot use mutating member '\(ref.baseName.text)' on immutable value: 'self' is immutable"
+                )
+            }
             let argSyntaxes = Array(call.arguments)
             var args: [Value] = []
             args.reserveCapacity(argSyntaxes.count + (call.trailingClosure != nil ? 1 : 0))
