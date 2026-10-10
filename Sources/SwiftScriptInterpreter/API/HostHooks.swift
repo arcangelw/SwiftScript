@@ -222,6 +222,14 @@ extension ShellKit.NetworkConfig {
     /// network bridges can share the same enforcement.
     @usableFromInline
     func checkAllowed(url: URL, method: String) throws {
+        // S8 R8-10：私网段拒绝（防 DNS rebinding 打穿私网）——denyPrivateRanges 兑现。
+        // 位次硬性：插在 `if dangerouslyAllowFullInternetAccess { return }` 之前——
+        // bypass 只跳 method/allow-list 两闸，私网检查不可跳（ShellKit 文档契约：
+        // "Even when true, denyPrivateRanges still applies"）。
+        if denyPrivateRanges, let host = url.host?.lowercased(),
+           PrivateIP.isPrivate(host: host) {
+            throw NetworkAccessDenied(url: url, reason: "private range: \(host)")
+        }
         if dangerouslyAllowFullInternetAccess { return }
         // Method gate. Unknown verbs (LINK, UNLINK, custom WebDAV, …)
         // must be rejected outright — falling back to `.GET` would
